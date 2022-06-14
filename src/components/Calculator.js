@@ -1,4 +1,5 @@
-import React, { useReducer } from "react";
+import axios from "../axios-instance";
+import React, { useEffect, useReducer } from "react";
 import DigitButton from "./DigitButton";
 import OperationButton from "./OperationButton";
 import "./styles.css";
@@ -9,6 +10,9 @@ export const ACTIONS = {
   CLEAR: "clear",
   DELETE_DIGIT: "delete-digit",
   EVALUATE: "evaluate",
+  FETCH_SUCCESS: "fetch-success",
+  FETCH_IN_PROGRESS: "fetch-in-progress",
+  FETCH_ERROR: "fetch-error",
 };
 
 const reducer = (state, { type, payload }) => {
@@ -57,9 +61,9 @@ const reducer = (state, { type, payload }) => {
 
       return {
         ...state,
-        previousOperand: evaluate(state),
-        operation: payload.operation,
-        currentOperand: null,
+        fetch: !state.fetch,
+        overwrite: true,
+        newOperation: payload.operation,
       };
 
     case ACTIONS.CLEAR:
@@ -88,7 +92,6 @@ const reducer = (state, { type, payload }) => {
       };
 
     case ACTIONS.EVALUATE:
-      console.log(state);
       if (
         state.operation == null ||
         state.currentOperand == null ||
@@ -101,39 +104,48 @@ const reducer = (state, { type, payload }) => {
         ...state,
         fetch: !state.fetch,
         overwrite: true,
-        previousOperand: null,
-        operation: null,
-        currentOperand: evaluate(state),
       };
 
+    case ACTIONS.FETCH_SUCCESS:
+      if (
+        state.operation == null ||
+        state.currentOperand == null ||
+        state.previousOperand == null
+      ) {
+        return state;
+      }
+
+      if (state.newOperation) {
+        return {
+          ...state,
+          calculating: false,
+          overwrite: true,
+          operation: state.newOperation,
+          newOperation: null,
+          previousOperand: payload,
+          currentOperand: null,
+        };
+      }
+
+      return {
+        ...state,
+        calculating: false,
+        overwrite: true,
+        previousOperand: null,
+        operation: null,
+        currentOperand: payload,
+      };
+
+    case ACTIONS.FETCH_IN_PROGRESS:
+      return {
+        ...state,
+        calculating: true,
+      };
+
+    case ACTIONS.FETCH_ERROR:
+      return state;
     default:
   }
-};
-
-const evaluate = ({ currentOperand, previousOperand, operation }) => {
-  const prev = parseFloat(previousOperand);
-  const current = parseFloat(currentOperand);
-
-  if (isNaN(prev) || isNaN(current)) return "";
-
-  let computation = "";
-  switch (operation) {
-    case "+":
-      computation = prev + current;
-      break;
-    case "-":
-      computation = prev - current;
-      break;
-    case "*":
-      computation = prev * current;
-      break;
-    case "÷":
-      computation = prev / current;
-      break;
-    default:
-  }
-
-  return computation.toString();
 };
 
 const INTEGER_FORMATTER = new Intl.NumberFormat("pl-pl", {
@@ -148,18 +160,39 @@ const formatOperand = (operand) => {
 };
 
 const Calculator = () => {
-  const [{ currentOperand, previousOperand, operation }, dispatch] = useReducer(
-    reducer,
-    {}
-  );
+  const [
+    { currentOperand, previousOperand, operation, fetch = false, calculating },
+    dispatch,
+  ] = useReducer(reducer, {});
+
+  useEffect(() => {
+    if (currentOperand && previousOperand) {
+      dispatch({ type: ACTIONS.FETCH_IN_PROGRESS });
+      axios
+        .post("/calculation", {
+          a: parseFloat(previousOperand),
+          b: parseFloat(currentOperand),
+          operator: operation,
+        })
+        .then((response) =>
+          dispatch({
+            type: ACTIONS.FETCH_SUCCESS,
+            payload: response.data.result,
+          })
+        )
+        .catch((error) => dispatch({ type: ACTIONS.FETCH_ERROR }));
+    }
+  }, [fetch]);
 
   return (
     <div className="calculator-grid">
       <div className="output">
         <div className="previous-operand">
-          {formatOperand(previousOperand)} {operation}
+          {/* {formatOperand(previousOperand)} {operation} */}
+          {previousOperand} {operation}
         </div>
-        <div className="current-operand">{formatOperand(currentOperand)}</div>
+        {/* <div className="current-operand">{formatOperand(currentOperand)}</div> */}
+        <div className="current-operand">{currentOperand}</div>
       </div>
       <button
         className="span-two"
@@ -189,7 +222,7 @@ const Calculator = () => {
         className="span-two"
         onClick={() => dispatch({ type: ACTIONS.EVALUATE })}
       >
-        =
+        {calculating ? <div className="ui active inline loader"></div> : "="}
       </button>
     </div>
   );
