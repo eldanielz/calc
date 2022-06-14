@@ -192,7 +192,9 @@ const Calculator = () => {
           {previousOperand} {operation}
         </div>
         {/* <div className="current-operand">{formatOperand(currentOperand)}</div> */}
-        <div className="current-operand">{currentOperand}</div>
+        <div className="current-operand">
+          <p>{currentOperand}</p>
+        </div>
       </div>
       <button
         className="span-two"
